@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Feedback</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, sans-serif;
+      line-height: 1.5;
+      color: #1a1a1a;
+      background: #f5f5f5;
+    }
+
+    .container {
+      max-width: 560px;
+      margin: 0 auto;
+      padding: 1.5rem 1rem 3rem;
+    }
+
+    h1 {
+      margin: 0 0 0.25rem;
+      font-size: 1.5rem;
+      font-weight: 600;
+    }
+
+    .subtitle {
+      margin: 0 0 1.5rem;
+      color: #666;
+      font-size: 0.95rem;
+    }
+
+    /* Form card */
+    .card {
+      background: #fff;
+      border-radius: 8px;
+      padding: 1.25rem;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+      margin-bottom: 1.5rem;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 1rem;
+      font-size: 0.875rem;
+      font-weight: 500;
+    }
+
+    input, textarea {
+      display: block;
+      width: 100%;
+      margin-top: 0.35rem;
+      padding: 0.6rem 0.75rem;
+      font: inherit;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      background: #fff;
+    }
+
+    input:focus, textarea:focus {
+      outline: none;
+      border-color: #2563eb;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+    }
+
+    textarea {
+      min-height: 100px;
+      resize: vertical;
+    }
+
+    .hint {
+      display: block;
+      margin-top: 0.25rem;
+      font-size: 0.75rem;
+      font-weight: 400;
+      color: #888;
+    }
+
+    button {
+      width: 100%;
+      padding: 0.7rem 1rem;
+      font: inherit;
+      font-weight: 500;
+      color: #fff;
+      background: #2563eb;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    button:hover { background: #1d4ed8; }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    /* Status messages */
+    .status {
+      margin-top: 1rem;
+      padding: 0.65rem 0.85rem;
+      border-radius: 6px;
+      font-size: 0.875rem;
+      display: none;
+    }
+
+    .status.visible { display: block; }
+    .status.success { background: #dcfce7; color: #166534; }
+    .status.error { background: #fee2e2; color: #991b1b; }
+
+    /* Feedback list */
+    h2 {
+      margin: 0 0 1rem;
+      font-size: 1.1rem;
+      font-weight: 600;
+    }
+
+    .feedback-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .feedback-item {
+      background: #fff;
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    }
+
+    .feedback-item header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 0.5rem;
+      margin-bottom: 0.35rem;
+    }
+
+    .feedback-item .name {
+      font-weight: 600;
+      font-size: 0.95rem;
+    }
+
+    .feedback-item .date {
+      font-size: 0.75rem;
+      color: #888;
+      white-space: nowrap;
+    }
+
+    .feedback-item .message {
+      margin: 0;
+      font-size: 0.9rem;
+      color: #333;
+      word-break: break-word;
+    }
+
+    .empty, .loading {
+      text-align: center;
+      color: #888;
+      font-size: 0.9rem;
+      padding: 1.5rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Feedback</h1>
+    <p class="subtitle">Share your thoughts — we'd love to hear from you.</p>
+
+    <div class="card">
+      <form id="feedback-form" novalidate>
+        <label>
+          Name
+          <input type="text" id="name" name="name" maxlength="50" required autocomplete="name">
+          <span class="hint">Max 50 characters</span>
+        </label>
+
+        <label>
+          Message
+          <textarea id="message" name="message" minlength="3" maxlength="500" required></textarea>
+          <span class="hint">3–500 characters</span>
+        </label>
+
+        <button type="submit" id="submit-btn">Send feedback</button>
+        <div id="status" class="status" role="alert"></div>
+      </form>
+    </div>
+
+    <h2>Recent feedback</h2>
+    <div id="feedback-container">
+      <p class="loading">Loading…</p>
+    </div>
+  </div>
+
+  <script>
+    const form = document.getElementById('feedback-form');
+    const statusEl = document.getElementById('status');
+    const submitBtn = document.getElementById('submit-btn');
+    const container = document.getElementById('feedback-container');
+
+    // Show a success or error message below the form
+    function showStatus(message, type) {
+      statusEl.textContent = message;
+      statusEl.className = 'status visible ' + type;
+    }
+
+    function hideStatus() {
+      statusEl.className = 'status';
+    }
+
+    // Format ISO date for display
+    function formatDate(iso) {
+      return new Date(iso).toLocaleString(undefined, {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      });
+    }
+
+    // Render the feedback list from API data
+    function renderFeedback(items) {
+      if (!items.length) {
+        container.innerHTML = '<p class="empty">No feedback yet. Be the first!</p>';
+        return;
+      }
+
+      const list = document.createElement('ul');
+      list.className = 'feedback-list';
+
+      for (const item of items) {
+        const li = document.createElement('li');
+        li.className = 'feedback-item';
+        li.innerHTML =
+          '<header>' +
+            '<span class="name"></span>' +
+            '<time class="date"></time>' +
+          '</header>' +
+          '<p class="message"></p>';
+        li.querySelector('.name').textContent = item.name;
+        li.querySelector('.date').textContent = formatDate(item.createdAt);
+        li.querySelector('.message').textContent = item.message;
+        list.appendChild(li);
+      }
+
+      container.innerHTML = '';
+      container.appendChild(list);
+    }
+
+    // Fetch and display all feedback (newest first from API)
+    async function loadFeedback() {
+      try {
+        const res = await fetch('/api/feedback');
+        if (!res.ok) throw new Error('Failed to load feedback');
+        const data = await res.json();
+        renderFeedback(data);
+      } catch {
+        container.innerHTML = '<p class="empty">Could not load feedback.</p>';
+      }
+    }
+
+    // Handle form submission
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      hideStatus();
+
+      const name = form.name.value.trim();
+      const message = form.message.value.trim();
+
+      submitBtn.disabled = true;
+
+      try {
+        const res = await fetch('/api/feedback', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, message }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          showStatus(data.error || 'Something went wrong.', 'error');
+          return;
+        }
+
+        showStatus('Thanks! Your feedback was sent.', 'success');
+        form.reset();
+        await loadFeedback();
+      } catch {
+        showStatus('Network error. Please try again.', 'error');
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+
+    loadFeedback();
+  </script>
+</body>
+</html>
