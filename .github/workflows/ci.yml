@@ -1,0 +1,79 @@
+name: CI — test, scan, publish
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*.*.*']        # v1.0.0 kabi teglar ham pipeline'ni ishga tushiradi
+  pull_request:
+    branches: [main]
+
+env:
+  IMAGE_NAME: ghcr.io/a-kamronb3k/dockerized-feedback-api   # FAQAT kichik harf!
+
+jobs:
+  # ---------- 1-bosqich: sifat darvozasi ----------
+  lint-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+
+  # ---------- 2-bosqich: build -> scan -> push ----------
+  build-scan-push:
+    needs: lint-test          # testlar yiqilsa, bu job umuman boshlanmaydi
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write         # GHCR'ga yozish uchun SHART (eng ko'p unutiladigan joy!)
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}   # avtomatik token — PAT kerak EMAS
+
+      - name: Docker metadata (teglar)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha
+            type=semver,pattern=v{{version}}
+
+      - name: Build image (skan uchun lokal)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: ${{ env.IMAGE_NAME }}:scan
+
+      - name: Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.IMAGE_NAME }}:scan
+          format: table
+          exit-code: '1'            # CRITICAL/HIGH topilsa -> pipeline YIQILADI
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true      # hali patch chiqmagan CVE'lar bloklamasin
+
+      - name: Push to GHCR
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: ${{ github.event_name != 'pull_request' }}   # PR'da push YO'Q
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
