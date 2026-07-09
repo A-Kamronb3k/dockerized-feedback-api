@@ -11,9 +11,10 @@
   ENV NODE_ENV=production
   WORKDIR /app
   
-  # npm runtime'da ishlatilmaydi — olib tashlaymiz:
-  # kichikroq image + kichikroq hujum yuzasi (Trivy topgan CVE ham shu bilan ketadi)
-  RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
+# OS paketlarini xavfsizlik tuzatmalarigacha yangilaymiz (base image orqada qolganda)
+# + npm runtime'da ishlatilmaydi — olib tashlaymiz
+RUN apk --no-cache upgrade \
+    && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
   
   # 1-bosqichdan faqat tayyor node_modules ni olamiz
   COPY --chown=node:node --from=deps /app/node_modules ./node_modules
