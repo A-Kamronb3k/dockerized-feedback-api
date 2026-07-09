@@ -40,3 +40,23 @@ Final image: `node:20-alpine`-based, multi-stage, non-root, healthchecked — **
 ## Next step
  
 CI pipeline (GitHub Actions): lint → test → build → **Trivy vulnerability scan** → push to GitHub Container Registry.
+
+
+## What the pipeline caught (real incidents, week one)
+
+The Trivy gate blocked two real vulnerabilities before they could reach the registry:
+
+1. **CVE in `tar` inside the base image's bundled npm.** The runtime never uses npm 
+   (`npm ci` only runs in the build stage), so instead of ignoring the finding I 
+   **removed npm from the final stage entirely** — eliminating the CVE and shrinking 
+   the attack surface.
+2. **CVE-2026-45447 (OpenSSL heap use-after-free)** in the alpine base image, with a 
+   fix already published upstream. Removing OpenSSL isn't an option (Node needs it 
+   for TLS), so the correct move was **`apk --no-cache upgrade`** in the runtime 
+   stage to pull patched OS packages.
+
+Bonus lesson: my pinned `trivy-action@0.28.0` stopped resolving because the upstream 
+project re-tagged all releases with a `v` prefix after a **supply-chain attack** — 
+old tags were removed in the cleanup. Pinning is still right (floating refs like 
+`@master` are exactly what such attacks exploit); pins just need occasional 
+maintenance. The gold standard is pinning to a commit SHA.
