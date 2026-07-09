@@ -43,7 +43,7 @@ The public GHCR image runs on **Render's free tier** (originally planned for Koy
 which introduced a mandatory subscription mid-sprint — free tiers change, plans adapt). 
 Render routes HTTPS traffic to the container's port 3000; config comes from dashboard 
 env vars (`NODE_ENV=production`, `PORT=3000`), never baked into the image. The free 
-instance spins down after ~15 min of inactivity; cold start is ~[X]s (measured). 
+instance spins down after ~15 min of inactivity; cold start is ~50s. 
 The `/health` endpoint written on day one now serves three masters: Docker's 
 HEALTHCHECK, the host's checks, and my own curl tests.
 
