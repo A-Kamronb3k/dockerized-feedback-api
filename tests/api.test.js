@@ -54,3 +54,68 @@ test('GET /api/feedback/999999 returns 404', async () => {
   assert.equal(res.status, 404);
   assert.equal(res.body.error, 'feedback not found');
 });
+
+test('POST /api/feedback with name exactly 50 characters returns 201', async () => {
+  const name = 'a'.repeat(50);
+  const res = await request(app)
+    .post('/api/feedback')
+    .send({ name, message: 'Valid message' });
+
+  assert.equal(res.status, 201);
+  assert.equal(res.body.name, name);
+});
+
+test('POST /api/feedback with name of 51 characters returns 400', async () => {
+  const res = await request(app)
+    .post('/api/feedback')
+    .send({ name: 'a'.repeat(51), message: 'Valid message' });
+
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'name must be 50 characters or fewer');
+});
+
+test('POST /api/feedback with message exactly 3 characters returns 201', async () => {
+  const res = await request(app)
+    .post('/api/feedback')
+    .send({ name: 'Bob', message: 'abc' });
+
+  assert.equal(res.status, 201);
+  assert.equal(res.body.message, 'abc');
+});
+
+test('POST /api/feedback with empty JSON body returns 400', async () => {
+  const res = await request(app).post('/api/feedback').send({});
+
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'name is required');
+});
+
+test('GET /api/feedback returns items sorted newest-first', async () => {
+  const older = await request(app)
+    .post('/api/feedback')
+    .send({ name: 'SortOlder', message: 'First created' });
+  assert.equal(older.status, 201);
+
+  const newer = await request(app)
+    .post('/api/feedback')
+    .send({ name: 'SortNewer', message: 'Second created' });
+  assert.equal(newer.status, 201);
+
+  const res = await request(app).get('/api/feedback');
+  assert.equal(res.status, 200);
+
+  const ids = res.body.map((item) => item.id);
+  const newerIndex = ids.indexOf(newer.body.id);
+  const olderIndex = ids.indexOf(older.body.id);
+  assert.ok(newerIndex !== -1);
+  assert.ok(olderIndex !== -1);
+  assert.ok(newerIndex < olderIndex, 'newer item should appear before older item');
+});
+
+test('GET /api/nothing returns 404 JSON', async () => {
+  const res = await request(app).get('/api/nothing');
+
+  assert.equal(res.status, 404);
+  assert.equal(res.type, 'application/json');
+  assert.equal(res.body.error, 'not found');
+});
